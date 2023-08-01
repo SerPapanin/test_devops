@@ -1,0 +1,84 @@
+# Allow all traffic for addresses in ALLOW_ALL chain
+  iptables -N ALLOW_ALL
+  iptables -A ALLOW_ALL -j ACCEPT -m comment --comment "ALLOW_ALL"
+  iptables -P ALLOW_ALL ALLOW 
+
+# Allow all traffic for addresses in DB_APP_CONTAINERS chain
+  iptables -N DB_APP_CONTAINERS
+  iptables -A DB_APP_CONTAINERS -j ACCEPT -m comment --comment "DB_APP_CONTAINERS"
+  iptables -P DB_APP_CONTAINERS ALLOW
+
+# Allow all traffic for addresses in ACCESS_ON_DEMAND chain
+  iptables -N ACCESS_ON_DEMAND
+  iptables -A ACCESS_ON_DEMAND -j ACCEPT -m comment --comment "ACCESS_ON_DEMAND"
+  iptables -P ACCESS_ON_DEMAND ALLOW
+
+# Allow specific ports for addresses in TEMP_ACCESS chain
+  iptables -N TEMP_ACCESS
+  iptables -A TEMP_ACCESS -p tcp -m multiport --dports 80,443 -j ACCEPT -m comment --comment "TEMP_ACCESS_TCP"
+  iptables -A TEMP_ACCESS -p udp -m multiport --dports 53,5000:5100 -j ACCEPT -m comment --comment "TEMP_ACCESS_UDP"
+  iptables -P TEMP_ACCESS DROP
+
+# Allow specific ports for publish in OUT_TO_WORLD chain
+  iptables -N OUT_TO_WORLD
+  iptables -A OUT_TO_WORLD -p tcp -m multiport --dports 80,443 -j ACCEPT -m comment --comment "OUT_TO_WORLD_TCP"
+  iptables -A OUT_TO_WORLD -p udp -m multiport --dports 53,125 -j ACCEPT -m comment --comment "OUT_TO_WORLD_UDP"
+  iptables -P OUT_TO_WORLD DROP
+
+
+# Add specific addresses to the ALLOW_ALL chain
+  iptables -A INPUT -s 10.0.0.20 -j ALLOW_ALL -m comment --comment "AdminPC"
+  iptables -A FORWARD -s 10.0.0.20 -j ALLOW_ALL -m comment --comment "AdminPC"
+
+# Add specific addresses to the DB_APP_CONTAINERS chain
+  iptables -A INPUT -s 10.0.0.30 -j DB_APP_CONTAINERS -m comment --comment "DBmysql"
+  iptables -A FORWARD -s 10.0.0.30 -j DB_APP_CONTAINERS -m comment --comment "DBmysql"
+
+# Add specific addresses to the ACCESS_ON_DEMAND chain
+  iptables -A INPUT -s 10.0.0.40 -j ACCESS_ON_DEMAND -m comment --comment "Manager1"
+  iptables -A FORWARD -s 10.0.0.40 -j ACCESS_ON_DEMAND -m comment --comment "Manager1"
+
+# Add specific addresses to the TEMP_ACCESS chain
+  iptables -A INPUT -s 10.0.0.50  -j TEMP_ACCESS -m comment --comment "Guest1"
+  iptables -A FORWARD -s 10.0.0.50 -j TEMP_ACCESS -m comment --comment "Guest1"
+
+# Add specific addresses to the OUT_TO_WORLD chain
+  iptables -A INPUT -j OUT_TO_WORLD
+  iptables -A OUTPUT -j OUT_TO_WORLD
+
+# Log traffic for addresses in ALLOW_ALL chain
+  iptables -A ALLOW_ALL -j LOG --log-prefix "[ALLOW_ALL] " --log-level 4
+
+# Log traffic for addresses in DB_APP_CONTAINERS chain
+  iptables -A DB_APP_CONTAINERS -j LOG --log-prefix "[DB_APP_CONTAINERS] " --log-level 4
+
+# Log traffic for addresses in ACCESS_ON_DEMAND chain
+  iptables -A ACCESS_ON_DEMAND -j LOG --log-prefix "[ACCESS_ON_DEMAND] " --log-level 4
+
+# Log traffic for addresses in TEMP_ACCESS chain
+  iptables -A TEMP_ACCESS -j LOG --log-prefix "[TEMP_ACCESS] " --log-level 4
+
+# Log traffic for ports in OUT_TO_WORLD chain
+  iptables -A OUT_TO_WORLD -j LOG --log-prefix "[OUT_TO_WORLD] " --log-level 4
+
+# Log blocked traffic
+  iptables -A INPUT -j LOG --log-prefix "[Blocked INPUT traffic] " --log-level 4
+  iptables -A OUTPUT -j LOG --log-prefix "[Blocked OUTPUT traffic] " --log-level 4
+  iptables -A FORWARD -j LOG --log-prefix "[Blocked FORWARD traffic] " --log-level 4
+  iptables -P INPUT DROP
+  iptables -P FORWARD DROP
+  iptables -P OUTPUT DROP
+
+# Create config files for rsyslog
+  nano /etc/rsyslog.d/20-iptables.conf
+
+
+:msg, contains, "[ALLOW_ALL] " -/var/log/iptables_allow_all.log
+:msg, contains, "[DB_APP_CONTAINERS] " -/var/log/iptables_db_app.log
+:msg, contains, "[ACCESS_ON_DEMAND] " -/var/log/iptables_on_demand.log
+:msg, contains, "[TEMP_ACCESS] " -/var/log/iptables_temp_access.log
+:msg, contains, "[OUT_TO_WORLD] " -/var/log/iptables_out_ports.log
+:msg, contains, "[Blocked INPUT traffic] " -/var/log/iptables_block_INPUT.log
+:msg, contains, "[Blocked OUTPUT traffic] " -/var/log/iptables_block_OUTPUT.log
+:msg, contains, "[Blocked FORWARD traffic] " -/var/log/iptables_block_OUTPUT.log
+& ~

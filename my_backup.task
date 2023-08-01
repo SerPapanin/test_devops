@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# Default parameters
+backup_directory="/home/opc/backup"
+remote_user="ubuntu"
+remote_server="10.0.0.157"
+debug_mode=false
+directories_to_backup="/home/ubuntu/dir2"
+full_backup=false
+
+# Help usage
+usage() {
+  echo "Usage: $0 [-h] [-d backup_directory] [-u remote_user] [-s remote_server] [-D directories_to_backup] [-f]"
+  echo "Options:"
+  echo "  -h                    Show this help message."
+  echo "  -d backup_directory   Specify the directory to store backups."
+  echo "  -u remote_user        Specify the remote user for the connection."
+  echo "  -s remote_server      Specify the remote server IP."
+  echo "  -D directories        Specify directories to backup (space-separated)."
+  echo "  -f                    Perform a full backup."
+  exit 1
+}
+
+# Parce input parameters
+while getopts ":hd:u:s:D:f" opt; do
+  case $opt in
+    h)
+      usage
+      ;;
+    d)
+      backup_directory="$OPTARG"
+      ;;
+    u)
+      remote_user="$OPTARG"
+      ;;
+    s)
+      remote_server="$OPTARG"
+      ;;
+    D)
+      directories_to_backup="$OPTARG"
+      ;;
+    f)
+      full_backup=true
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      usage
+      ;;
+  esac
+done
+
+# Check if backup dirrectory is exit
+if [ ! -d "$backup_directory" ]; then
+  echo "Backup directory does not exist. Creating it..."
+  mkdir -p "$backup_directory"/{Full,FullOld,Inc,IncOld}
+fi
+
+# Debug messages
+debug_msg() {
+  if [ "$debug_mode" = true ]; then
+    echo "DEBUG: $1"
+  fi
+}
+
+# Remote backup
+perform_remote_backup() {
+  local backup_type="inc"
+  if [ "$full_backup" = true ]; then
+    backup_type="full"
+  fi
+
+  # Make file name
+  #local remote_backup_filename="${backup_type}_backup_$(date +'%Y%m%d_%H%M%S').tar.gz"
+  local backup_filename="${backup_type}_backup.tar.gz"
+
+  # Create archive on remore server
+   ssh "$remote_user@$remote_server" << EOF
+     if [ "$full_backup" = true ]; then
+        >"/tmp/incremental.list"
+     fi
+     tar -czv --listed-incremental="/tmp/incremental.list" "$directories_to_backup" | gpg -e -r "$remote_user" > "/tmp/$backup_filename.gpg"
+    exit
+EOF
+
+  if [ "$full_backup" = true ]; then
+     scp "$remote_user@$remote_server:/tmp/$backup_filename.gpg" "$backup_directory/Full" 
+     cp "$backup_directory/Full/$backup_filename.gpg" "$backup_directory/FullOld/"
+  else
+     scp "$remote_user@$remote_server:/tmp/$backup_filename.gpg" "$backup_directory/Inc" 
+     cp "$backup_directory/Inc/$backup_filename.gpg" "$backup_directory/IncOld/"
+  fi
+  # Remove archive from remote server
+  # ssh "$remote_user@$remote_server" "rm /tmp/$backup_filename.gpg"
+
+  debug_msg "Remote backup completed: $backup_directory/$backup_filename"
+}
+
+# Run remote backup
+perform_remote_backup
+
+echo "Backup process completed successfully."
+
+
+
+# Create logrotate config
+sudo nano /etc/logrotate.d/backup_rotation
+
+/home/opc/backup/FullOld/*.tar.gz.gpg {
+    daily
+    rotate  7
+    missingok
+    nocreate
+    sharedscripts
+    endscript
+}
+
+/home/opc/backup/IncOld/*.tar.gz.gpg {
+    hourly
+    rotate  24
+    missingok
+    nocreate
+    sharedscripts
+    endscript
+}

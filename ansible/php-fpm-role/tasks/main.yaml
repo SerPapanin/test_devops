@@ -1,0 +1,18 @@
+---
+- name: Install PHP-FPM
+  apt:
+    name: "php{{ php_version }}-fpm"
+    state: present
+
+- name: Create PHP-FPM socket config file
+  template:
+    src: php_socket_config.j2
+    dest: "/etc/php/{{ php_version }}/fpm/pool.d/{{ domain_name }}.conf"
+  notify:
+    - Reload PHP-FPM
+
+- name: Create index.php with phpinfo()
+  template:
+    src: info.php.j2
+    dest: "/var/www/{{ domain_name }}/info.php"
+    mode: "0644"

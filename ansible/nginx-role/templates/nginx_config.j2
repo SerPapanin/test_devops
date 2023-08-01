@@ -1,0 +1,23 @@
+server {
+    listen 80;
+    server_name {{ server_name }};
+
+    {% if enable_https %}
+    listen 443 ssl;
+    ssl_certificate /etc/nginx/ssl/{{ domain_name }}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{ domain_name }}.key;
+    {% endif %}
+
+    root /var/www/{{ domain_name }};
+    index index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/{{ domain_name }}.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+}

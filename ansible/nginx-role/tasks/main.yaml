@@ -1,0 +1,34 @@
+---
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+    - name: Create Nginx config file
+      template:
+        src: nginx_config.j2
+        dest: "/etc/nginx/sites-available/{{ domain_name }}"
+    - name: Enable Nginx site
+      file:
+        src: "/etc/nginx/sites-available/{{ domain_name }}"
+        dest: "/etc/nginx/sites-enabled/{{ domain_name }}"
+        state: link
+      notify:
+        - Reload Nginx
+
+    - name: Generate SSL certificate and key
+      command: >
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048
+        -keyout "/etc/nginx/ssl/{{ domain_name }}.key"
+        -out "/etc/nginx/ssl/{{ domain_name }}.crt"
+        -subj "/C=GE/ST=State/L=City/O=Organization/OU=Unit/CN={{ domain_name }}"
+      args:
+        creates:
+          - "/etc/nginx/ssl/{{ domain_name }}.key"
+          - "/etc/nginx/ssl/{{ domain_name }}.crt"
+      when: generate_ssl_certs and enable_https
+
+    - name: Create corresponding directory in /var/www
+      file:
+        path: "/var/www/{{ domain_name }}"
+        state: directory
+
